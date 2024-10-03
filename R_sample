@@ -1,0 +1,482 @@
+---
+title: "Bone Density Compiler"
+author: "Mounisha "
+date: "2023-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(dplyr)
+library(tidyverse)
+library(plyr)
+library(readxl)
+library(fs)
+library(data.table)
+
+library(openxlsx)
+library(readr)
+library(zoo)
+library(purrr)
+library(tidyr)
+
+library(ggplot2)
+require(gridExtra)
+library(ggpubr)
+library(tibble)
+```
+
+
+```{r}
+# Organization 
+#These files have different formats but many of them follow the same format which is considered anything with main in the name - main function and main_merged 
+#the rest are problematic hence the names problems 
+#we got 6 problems 
+#1) REJU FILE - it has less columns and has a standard deviation column that is extra 
+#2) missing the medulary volume 
+#3) extra idno column that was added 
+#4) extra diet column
+#5) + 6) both had their dataset in the column over from the normal placement 
+
+#for future use - the main function has the normal column format of the files and should be the one that is generally used to read and compile
+
+
+```
+
+
+```{r main function directory}
+#create the directory of the files that are needed and create an object with the files in them 
+bd_dir<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data"
+
+bone_density_files <- list.files(bd_dir, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+```
+```{r main function compiler, echo=FALSE}
+
+#creating the names of the columns for the file - this is the original column placement 
+names_col_main = c("genotype", "sex", "idno", "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"Dataset", "extra")
+
+
+#this is the function for the main file - that also creates a leg column/cortical/ and time pt with the info from the path
+main_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 4)
+  colnames(place_hold) <- names_col_main
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+  place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+  
+  
+}
+
+main_merged <- do.call(bind_rows, lapply(bone_density_files, main_func))
+
+# fix the couple time pt that did not come up 
+main_merged$time_pt_in_mo <- as.character(main_merged$time_pt_in_mo)
+main_merged$time_pt_in_mo[grepl("Rt", main_merged$time_pt_in_mo)] <- "C9 25"
+
+#get rid of any columns that have an na in a tag = this is not data
+main_merged<-main_merged %>% drop_na(tag)
+
+#main_merged is the first set of data
+
+ 
+
+
+```
+
+```{r}
+#problem 1 
+
+#directory/folder set up 
+bd_dir_p1<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem1_REJV_file/"
+
+bone_density_files_p1 <- list.files(bd_dir_p1, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+#column names 
+names_p1 <- c("tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension", "standard_dev",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"Dataset", "extra")
+
+p1_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p1
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  
+  return(place_hold)
+  
+  
+  
+}
+
+#merging all the rows
+p1_merged <- do.call(bind_rows, lapply(bone_density_files_p1, p1_func))
+
+#dropping rows with nas 
+p1_merged<-p1_merged %>% drop_na(tag)
+
+#this file has no time points because it is REJU and the name/data set didnt have any 
+p1_merged$time_pt_in_mo = "NA"
+
+#write.csv(p1_merged, "M:/Postbacs/Mounisha/Projects/Bone Density/compiled1.csv")
+
+
+```
+```{r}
+
+#directory/folder set up
+bd_dir_p2<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem2_miss_mv/"
+
+bone_density_files_p2 <- list.files(bd_dir_p2, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+#same format as before
+
+names_p2 <- c("genotype", "sex", "idno", "tag", "unit",	"tissue_volume",	"bone_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"Dataset", "extra")
+
+p2_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p2
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+  place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+
+  
+}
+
+p2_merged <- do.call(bind_rows, lapply(bone_density_files_p2, p2_func))
+
+p2_merged<-p2_merged %>% drop_na(tag)
+
+
+
+
+```
+```{r}
+#problem 3
+
+#same format as before
+bd_dir_p3<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem3_ex_tag/"
+
+bone_density_files_p3 <- list.files(bd_dir_p3, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+names_p3 <- c("genotype", "sex", "idno", "tag", "idno_extra","unit",	"tissue_volume",	"bone_volume", "medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"Dataset", "extra")
+
+p3_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p3
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+  place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+  
+  
+}
+
+p3_merged <- do.call(bind_rows, lapply(bone_density_files_p3, p3_func))
+
+
+p3_merged$time_pt_in_mo <- as.character(p3_merged$time_pt_in_mo)
+
+p3_merged<-p3_merged %>% drop_na(tag)
+
+
+
+```
+```{r}
+#problem 4 - adding a column for diet
+
+#same format as before
+
+bd_dir_p4<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem4_diet/"
+
+bone_density_files_p4 <- list.files(bd_dir_p4, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+
+names_p4 <- c("diet", "genotype", "sex", "idno", "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"Dataset", "extra")
+
+p4_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p4
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+   place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+  
+  
+}
+
+p4_merged <- do.call(bind_rows, lapply(bone_density_files_p4, p4_func))
+
+
+
+
+p4_merged<-p4_merged %>% drop_na(tag)
+
+
+
+
+```
+
+```{r}
+#problem 5
+
+#same format as before 
+bd_dir_p5<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem5_dataset/"
+
+bone_density_files_p5 <- list.files(bd_dir_p5, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+
+names_p5 <- c("genotype", "sex", "idno", "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement", "extra", "Dataset")
+
+p5_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p5
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+   place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+  
+  
+}
+
+p5_merged <- do.call(bind_rows, lapply(bone_density_files_p5, p5_func))
+
+
+
+
+p5_merged<-p5_merged %>% drop_na(tag)
+
+
+
+
+```
+```{r}
+#problem 6
+
+#same format as before
+
+bd_dir_p6<- "M:/SLAM_May2022_onward/Results/Compilers/Bone density/Raw Data/problem6/"
+
+bone_density_files_p6 <- list.files(bd_dir_p6, pattern = '3D', all.files = TRUE, full.names = TRUE, recursive = FALSE)
+
+
+names_p6 <- c("diet", "genotype", "sex", "idno", "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement", "extra", "Dataset")
+
+p6_func <- function(file){
+  
+  place_hold <- read_excel(file, skip = 3)
+  colnames(place_hold) <- names_p6
+  
+  place_hold$leg <- ifelse(grepl("Lf", place_hold$Dataset), "Left", 
+                      ifelse(grepl("Rt", place_hold$Dataset), "Right", "NA"))
+   
+  place_hold$cortical <-  ifelse(grepl("cortical", place_hold$Dataset), "cortical", "NA")
+  
+  place_hold$time_pt_in_mo <- gsub(".*SLAM", "\\1", gsub("mo.*", "\\1", place_hold$Dataset))
+  
+  
+   place_hold$file_path <- basename(file)
+  
+  place_hold$file_path <- as.character(place_hold$file_path)
+  
+  return(place_hold)
+  
+  
+  
+}
+
+p6_merged <- do.call(bind_rows, lapply(bone_density_files_p6, p6_func))
+
+
+
+
+p6_merged<-p6_merged %>% drop_na(tag)
+
+
+
+
+
+
+```
+```{r}
+#select all the columns that you need for each of the data sets 
+
+main_merged <- main_merged %>% select( "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"leg", "cortical", "time_pt_in_mo", "file_path")
+
+p1_merged <- p1_merged %>% select("tag", "unit","tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension", 	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"leg", "cortical", "time_pt_in_mo", "file_path")
+
+p2_merged <- p2_merged %>% select( "tag", "unit",	"tissue_volume",	"bone_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"leg", "cortical", "time_pt_in_mo", "file_path")
+
+p3_merged <- p3_merged %>% select( "tag","unit",	"tissue_volume",	"bone_volume", "medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement", "leg", "cortical", "time_pt_in_mo", "file_path"	)
+
+p4_merged <- p4_merged %>% select(  "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"leg", "cortical", "time_pt_in_mo", "file_path")
+
+p5_merged <- p5_merged %>% select( "tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement", "leg", "cortical" , "time_pt_in_mo", "file_path")
+
+p6_merged <- p6_merged %>% select("tag", "unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size","date_of_measurement",	"leg", "cortical", "time_pt_in_mo", "file_path")
+
+
+```
+
+```{r}
+#create everything as a factor and then merge everything together
+main_merged <- lapply(main_merged, as.factor)
+p1_merged <- lapply(p1_merged, as.factor)
+ p2_merged <- lapply( p2_merged, as.factor)
+ p3_merged <- lapply( p3_merged, as.factor)
+ p4_merged <- lapply( p4_merged, as.factor)
+ p5_merged <- lapply( p5_merged, as.factor)
+ p6_merged <- lapply( p6_merged, as.factor)
+
+bone_density_merged <- bind_rows(main_merged, p1_merged, p2_merged, p3_merged, p4_merged, p5_merged, p6_merged)
+#fix the tags that need to be fixed - in the future need to write a function to check tag history when you cant find tag - SIDE PROJECT
+bone_density_merged$tag <- gsub(" ", "", bone_density_merged$tag)
+bone_density_merged$tag <- as.character(bone_density_merged$tag)
+bone_density_merged$tag[grepl("SLAM025", bone_density_merged$tag)] <- "SLAM25"
+
+bone_density_merged$tag[grepl("183642", bone_density_merged$tag)] <- "SLAM1189"
+
+bone_density_merged$tag[grepl("SLAM183031", bone_density_merged$tag)] <- "183031"
+
+#bone_density_merged$tag <- ifelse(grepl('SLAM025', bone_density_merged$tag), 'SLAM25', bone_density_merged$tag)
+
+#bone_density_merged$tag <- ifelse(grepl('183642', bone_density_merged$tag), 'SLAM1189', bone_density_merged$tag)
+
+#bone_density_merged$tag <- ifelse(grepl('SLAM183031', bone_density_merged$tag), '183031', bone_density_merged$tag)
+
+
+#get the census 
+census <- read_excel("M:/SLAM_May2022_onward/Census/Master Census_SLAM_C1 to C21_REJU_JDO_AGED_NALL_EO05.01.24.xlsx")
+
+census<- census %>% select(tag, idno, project, cohort, sex, strain, dob )
+
+#get rid ofthe space in the bone_density_merged$tag to be able to match the tag from the census
+
+
+
+bone_density_merged_final <- bone_density_merged %>% left_join(census, by = "tag")
+
+#change the column name from date of measurement to date of analysis 
+
+colnames(bone_density_merged_final)[which(names(bone_density_merged_final) == "date_of_measurement")] <- "date_of_analysis"
+
+#split the time_pt_in_mo into time_pt_in_mo and cohort_file column 
+
+
+
+bone_density_merged_final <- separate(bone_density_merged_final,time_pt_in_mo, into = c("cohort_file", "time_pt_in_mo"), sep = " (?=[^ ]+$)" ) 
+
+
+
+bone_density_merged_final <- bone_density_merged_final %>% select("tag", "idno",	"project",	"cohort",	"sex",	"strain",	"dob", "date_of_analysis",	"leg",	"cortical", "cohort_file",	"time_pt_in_mo",	"unit",	"tissue_volume",	"bone_volume",	"medulary_volume",	"Percent_bone_volume",	"tissue_surface",	"bone_surface",	"intersection_surface",	"bone_surface/volume_ratio",	"bone_surface_density",	"CORTICAL_thickness",	"Fractal_dimension",	"Lower_grey_threshold",	"Upper_grey_threshold",	"Pixel_size", "file_path")
+```
+
+```{r}
+#find the reju information and use the cms census to put all the info in 
+
+
+
+
+
+cms_census <- read.csv("M:/SLAM_May2022_onward/Census/cms_census_ASP458_2024-06-10.csv")
+
+cms_census <- cms_census %>% select(Tag, Sex, Strain, Born)
+
+colnames(cms_census) <- c("tag", "sex", "strain", "dob")
+
+bone_density_merged_final$sex[is.na(bone_density_merged_final$sex)] <- cms_census$sex[match(bone_density_merged_final$tag, cms_census$tag)[which(is.na(bone_density_merged_final$sex))]]
+
+bone_density_merged_final$strain[is.na(bone_density_merged_final$strain)] <- cms_census$strain[match(bone_density_merged_final$tag, cms_census$tag)[which(is.na(bone_density_merged_final$strain))]]
+
+cms_census$dob <- as.character(cms_census$dob)
+
+bone_density_merged_final$dob <- as.character(bone_density_merged_final$dob)
+
+bone_density_merged_final$dob[is.na(bone_density_merged_final$dob)] <- cms_census$dob[match(bone_density_merged_final$tag, cms_census$tag)[which(is.na(bone_density_merged_final$dob))]]
+
+
+
+
+
+
+
+
+```
+
+
+```{r}
+setwd('M:/SLAM_May2022_onward/Results/Compilers/Bone density/Processing')
+
+write.csv(bone_density_merged_final, paste0("Bone_Density_", Sys.Date(), ".csv"), row.names = FALSE)
+
+```
+
+
+
+
